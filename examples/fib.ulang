@@ -1,0 +1,10 @@
+fib = fn(n) {
+    a = 0; b = 1;
+    for a < n {
+        print(a);
+        t = b; b = a + b; a = t;
+    };
+    print("");
+};
+
+fib(1000)

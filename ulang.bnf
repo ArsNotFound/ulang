@@ -1,0 +1,323 @@
+/* Lexical Part */
+
+terminator    : ';' ;
+
+// Keywords
+kwdFn       : 'f' 'n' ;
+kwdIf       : 'i' 'f' ;
+kwdElse     : 'e' 'l' 's' 'e' ;
+kwdReturn   : 'r' 'e' 't' 'u' 'r' 'n' ;
+kwdFor      : 'f' 'o' 'r' ;
+kwdNull     : 'n' 'u' 'l' 'l' ;
+
+boolLit : 't' 'r' 'u' 'e' | 'f' 'a' 'l' 's' 'e' ;
+
+// Operators
+lOr  : '|' '|' ;
+lAnd : '&' '&' ;
+
+lNot : '!' ;
+
+assign : '=' ;
+
+_eq    : '=' '=' ;
+_neq   : '!' '=' ;
+equals : _eq | _neq ;
+
+_lt           : '<' ;
+_lte          : '<' '=' ;
+_gt           : '>' ;
+_gte          : '>' '=' ;
+lessOrGreater : _lt | _lte | _gt | _gte ;
+
+or    : '|' ;
+xor   : '^' ;
+and   : '&' ;
+_not   : '~' ;
+_shl  : '<' '<' ;
+_shr  : '>' '>' ;
+shift : _shl | _shr ;
+
+_mul    : '*' ;
+_div    : '/' ;
+_mod    : '%' ;
+product : _mul | _div | _mod ;
+
+// Whitespaces
+!whitespace : ' ' | '\n' | '\t' | '\r' ;
+
+// Comments
+!comment : _lineComment | _blockComment ;
+_lineComment : '/' '/' { . } '\n' ;
+_blockComment : '/' '*' { . | '*' } '*' '/' ;
+
+// Letters and digits
+_letter        : _unicodeLetter | '_' ;
+_unicodeLetter : 'a' - 'z' | 'A' - 'Z' ;
+_decimalDigit  : '0' - '9' ;
+_octalDigit    : '0' - '7' ;
+_hexDigit      : _decimalDigit | 'a' - 'f' | 'A' - 'F' ;
+
+// Identifiers
+identifier : _letter { _letter | _decimalDigit } ;
+
+// Integer literals
+intLit      : _decimalLit | _octalLit | _hexLit ;
+_decimalLit : '1' - '9' { _decimalDigit } ;
+_octalLit   : '0' { _octalDigit } ;
+_hexLit     : '0' ( 'x' | 'X' ) _hexDigit { _hexDigit } ;
+
+// Floating-point literals
+floatLit  : _decimals '.' [ _decimals ] [ _exponent ]
+          | _decimals _exponent
+          | '.' _decimals [ _exponent ]
+          ;
+_decimals : _decimalDigit { _decimalDigit } ;
+_exponent : ( 'e' | 'E' ) [ '+' | '-' ] _decimals ;
+
+// String literals
+stringLit          : _rawStrLit | _interpretedStrLit ;
+_rawStrLit         : '`' { . } '`';
+_interpretedStrLit : '"' { . | '\\' '"' | _escapeChar } '"' ;
+
+// Single-character escapes
+_escapeChar : '\\' 'n' | '\\' 'r' | '\\' 't' ;
+
+
+/* Syntax part */
+
+<<
+import (
+    "github.com/Ars2014/ulang/ast"
+    "github.com/Ars2014/ulang/token"
+)
+>>
+
+Program
+    : StatementList << ast.NewProgram($0.(ast.StatementList)) >>
+    ;
+
+// Statements
+StatementList
+    : Statement                          << ast.NewStatementList($0.(ast.Statement)) >>
+    | StatementList terminator Statement << ast.AppendStatement($0.(ast.StatementList), $2.(ast.Statement)) >>
+    | StatementList terminator           << $0, nil >>
+    ;
+
+Statement
+    : BlockStatement
+    | ReturnStatement
+    | ExpressionStatement
+    ;
+
+BlockStatement
+    : "{" StatementList "}" << ast.NewBlockStatement($T0, $1.(ast.StatementList)) >>
+    | "{" "}"               << ast.NewBlockStatement($T0, ast.StatementList{}) >>
+    ;
+
+ReturnStatement
+    : kwdReturn            << ast.NewReturnStatement($T0, nil) >>
+    | kwdReturn Expression << ast.NewReturnStatement($T0, $1.(ast.Expression)) >>
+    ;
+
+ExpressionStatement
+    : Expression          << ast.NewExpressionStatement($0.(ast.Expression)) >>
+    ;
+
+// Expressions
+ExpressionList
+    : Expression                    << ast.NewExpressionList($0.(ast.Expression)) >>
+    | ExpressionList "," Expression << ast.AppendExpression($0.(ast.ExpressionList), $2.(ast.Expression)) >>
+    | ExpressionList ","            << $0, nil >>
+    ;
+
+ExpressionMap
+    : Expression ":" Expression                   << ast.NewExpressionMap($0.(ast.Expression), $2.(ast.Expression)) >>
+    | ExpressionMap "," Expression ":" Expression << ast.AppendExpressionPair($0.(ast.ExpressionMap), $2.(ast.Expression), $4.(ast.Expression)) >>
+    | ExpressionMap ","                           << $0, nil >>
+    ;
+
+Expression
+    : Term1
+    | IfExpression
+    | ForExpression
+    | AssignExpression
+    ;
+
+Term1
+    : Term1 lOr Term2 << ast.NewInfixExpression($0.(ast.Expression), $T1, $2.(ast.Expression)) >>
+    | Term2
+    ;
+
+Term2
+    : Term2 lAnd Term3 << ast.NewInfixExpression($0.(ast.Expression), $T1, $2.(ast.Expression)) >>
+    | Term3
+    ;
+
+Term3
+    : Term3 lNot Term4 << ast.NewInfixExpression($0.(ast.Expression), $T1, $2.(ast.Expression)) >>
+    | Term4
+    ;
+
+Term4
+    : Term4 equals Term5 << ast.NewInfixExpression($0.(ast.Expression), $T1, $2.(ast.Expression)) >>
+    | Term5
+    ;
+
+Term5
+    : Term5 lessOrGreater Term6 << ast.NewInfixExpression($0.(ast.Expression), $T1, $2.(ast.Expression)) >>
+    | Term6
+    ;
+
+Term6
+    : Term6 or Term7 << ast.NewInfixExpression($0.(ast.Expression), $T1, $2.(ast.Expression)) >>
+    | Term7
+    ;
+
+Term7
+    : Term7 xor Term8 << ast.NewInfixExpression($0.(ast.Expression), $T1, $2.(ast.Expression)) >>
+    | Term8
+    ;
+
+Term8
+    : Term8 and Term9 << ast.NewInfixExpression($0.(ast.Expression), $T1, $2.(ast.Expression)) >>
+    | Term9
+    ;
+
+Term9
+    : Term9 shift Term10 << ast.NewInfixExpression($0.(ast.Expression), $T1, $2.(ast.Expression)) >>
+    | Term10
+    ;
+
+Term10
+    : Term10 "+" Term11 << ast.NewInfixExpression($0.(ast.Expression), $T1, $2.(ast.Expression)) >>
+    | Term10 "-" Term11 << ast.NewInfixExpression($0.(ast.Expression), $T1, $2.(ast.Expression)) >>
+    | Term11
+    ;
+
+Term11
+    : Term11 product Term12 << ast.NewInfixExpression($0.(ast.Expression), $T1, $2.(ast.Expression)) >>
+    | Term12
+    ;
+
+Term12
+    : PrefixExpression
+    | "(" Expression ")" << $1, nil >>
+    ;
+
+PrefixExpression
+    : PrimaryExpr
+    | PrefixOp PrimaryExpr << ast.NewPrefixExpression($T0, $1.(ast.Expression)) >>
+    ;
+
+PrefixOp
+    : "+"
+    | "-"
+    | "!"
+    | "~"
+    ;
+
+PrimaryExpr
+    : Operand
+    | IndexExpression
+    | CallExpression
+    | SelectorExpression
+    ;
+
+IndexExpression
+    : Term12 "[" Expression "]" << ast.NewIndexExpression($0.(ast.Expression), $T1, $2.(ast.Expression)) >>
+    ;
+
+CallExpression
+    : Term12 "(" ")"                << ast.NewCallExpression($0.(ast.Expression), $T1, nil) >>
+    | Term12 "(" ExpressionList ")" << ast.NewCallExpression($0.(ast.Expression), $T1, $2.(ast.ExpressionList)) >>
+    ;
+
+SelectorExpression
+    : Term12 "." Identifier << ast.NewSelectorExpression($0.(ast.Expression), $T1, $2.(*ast.Identifier)) >>
+    ;
+
+AssignExpression
+    : Identifier assign Expression         << ast.NewAssignExpression($0.(ast.Expression), $T1, $2.(ast.Expression)) >>
+    | IndexExpression assign Expression    << ast.NewAssignExpression($0.(ast.Expression), $T1, $2.(ast.Expression)) >>
+    | SelectorExpression assign Expression << ast.NewAssignExpression($0.(ast.Expression), $T1, $2.(ast.Expression)) >>
+    ;
+
+IfExpression
+    : kwdIf Expression BlockStatement                        << ast.NewIfExpression($T0, $1.(ast.Expression), $2.(*ast.BlockStatement), nil) >>
+    | kwdIf Expression BlockStatement kwdElse BlockStatement << ast.NewIfExpression($T0, $1.(ast.Expression), $2.(*ast.BlockStatement), $4.(*ast.BlockStatement)) >>
+    | kwdIf Expression BlockStatement kwdElse IfExpression   << ast.NewIfExpression($T0, $1.(ast.Expression), $2.(*ast.BlockStatement), &ast.BlockStatement{Statements: ast.StatementList{ &ast.ExpressionStatement { Expression: $4.(*ast.IfExpression) } }}) >>
+    ;
+
+ForExpression
+    : kwdFor BlockStatement                                                        << ast.NewForExpression($T0, nil, nil, nil, $1.(*ast.BlockStatement)) >>
+    | kwdFor Expression BlockStatement                                             << ast.NewForExpression($T0, nil, $1.(ast.Expression), nil, $2.(*ast.BlockStatement)) >>
+    | kwdFor terminator terminator BlockStatement                                  << ast.NewForExpression($T0, nil, nil, nil, $3.(*ast.BlockStatement)) >>
+    | kwdFor terminator terminator Expression BlockStatement                       << ast.NewForExpression($T0, nil, nil, $3.(ast.Expression), $4.(*ast.BlockStatement)) >>
+    | kwdFor terminator Expression terminator  BlockStatement                      << ast.NewForExpression($T0, nil, $2.(ast.Expression), nil, $4.(*ast.BlockStatement)) >>
+    | kwdFor terminator Expression terminator Expression BlockStatement            << ast.NewForExpression($T0, nil, $2.(ast.Expression), $4.(ast.Expression), $5.(*ast.BlockStatement)) >>
+    | kwdFor Expression terminator terminator BlockStatement                       << ast.NewForExpression($T0, $1.(ast.Expression), nil, nil, $4.(*ast.BlockStatement)) >>
+    | kwdFor Expression terminator terminator Expression BlockStatement            << ast.NewForExpression($T0, $1.(ast.Expression), nil, $4.(ast.Expression), $5.(*ast.BlockStatement)) >>
+    | kwdFor Expression terminator Expression terminator BlockStatement            << ast.NewForExpression($T0, $1.(ast.Expression), $3.(ast.Expression), nil, $5.(*ast.BlockStatement)) >>
+    | kwdFor Expression terminator Expression terminator Expression BlockStatement << ast.NewForExpression($T0, $1.(ast.Expression), $3.(ast.Expression), $5.(ast.Expression), $6.(*ast.BlockStatement)) >>
+    ;
+
+Operand
+    : Literal
+    | Identifier
+    ;
+
+IdentifierList
+    : Identifier                    << ast.NewIdentifierList($0.(*ast.Identifier)) >>
+    | IdentifierList "," Identifier << ast.AppendIdentifier($0.(ast.IdentifierList), $2.(*ast.Identifier)) >>
+    ;
+
+Identifier
+    : identifier << ast.NewIdentifier($T0) >>
+    ;
+
+Literal
+    : Null
+    | BooleanLiteral
+    | IntegerLiteral
+    | FloatLiteral
+    | StringLiteral
+    | FunctionLiteral
+    | ArrayLiteral
+    | HashLiteral
+    ;
+
+Null
+    : kwdNull << ast.NewNull($T0) >>
+    ;
+
+BooleanLiteral
+    : boolLit << ast.NewBooleanLiteral($T0) >>
+    ;
+
+IntegerLiteral
+    : intLit << ast.NewIntegerLiteral($T0) >>
+    ;
+
+FloatLiteral
+    : floatLit << ast.NewFloatLiteral($T0) >>
+    ;
+
+StringLiteral
+    : stringLit << ast.NewStringLiteral($T0) >>
+    ;
+
+FunctionLiteral
+    : kwdFn "(" ")" BlockStatement                << ast.NewFunctionLiteral($T0, nil, $3.(*ast.BlockStatement)) >>
+    | kwdFn "(" IdentifierList ")" BlockStatement << ast.NewFunctionLiteral($T0, $2.(ast.IdentifierList), $4.(*ast.BlockStatement)) >>
+    ;
+
+ArrayLiteral
+    : "[" "]"                << ast.NewArrayLiteral($T0, nil) >>
+    | "[" ExpressionList "]" << ast.NewArrayLiteral($T0, $1.(ast.ExpressionList)) >>
+    ;
+
+HashLiteral
+    : "{" "," "}"           << ast.NewHashLiteral($T0, nil) >>
+    | "{" ExpressionMap "}" << ast.NewHashLiteral($T0, $1.(ast.ExpressionMap)) >>
+    ;

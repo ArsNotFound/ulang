@@ -1,0 +1,6 @@
+test = {
+    "a": 10,
+    10: 11,
+};
+
+print(test[test["a"]]);

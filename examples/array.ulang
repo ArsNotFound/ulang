@@ -1,0 +1,5 @@
+a = [ "test", 0, "Hello",];
+
+for i = 0; i < len(a); i = i + 1 {
+    print(a[i]);
+};

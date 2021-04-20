@@ -1,0 +1,5 @@
+name = input("What is your name? ");
+
+// This is comment
+/* This is another comment */
+print("Hello " + name);
